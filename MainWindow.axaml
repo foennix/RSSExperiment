@@ -2,11 +2,53 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        xmlns:controls="using:Avalonia.Controls"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="650"
         x:Class="HelloWorldApp.MainWindow"
-        Title="HelloWorldApp">
-    <TextBlock Text="Hello World" 
-               FontSize="48" 
-               HorizontalAlignment="Center" 
-               VerticalAlignment="Center"/>
+        Title="Avalonia RSS Reader">
+  <Grid ColumnDefinitions="3*,280" RowDefinitions="Auto,*" Margin="16">
+    <Border Grid.Column="0" Grid.RowSpan="2" BorderThickness="1" BorderBrush="#DDDDDD" CornerRadius="8" Padding="16" Background="#FAFAFA" Margin="0,0,16,0">
+      <ScrollViewer>
+        <StackPanel Spacing="12">
+          <TextBlock x:Name="FeedTitleTextBlock"
+                     Text="Your feed will appear here"
+                     FontSize="26"
+                     FontWeight="SemiBold"
+                     TextWrapping="Wrap"/>
+          <ItemsControl x:Name="FeedItemsControl">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="12"/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="White" CornerRadius="8" BorderThickness="1" BorderBrush="#E0E0E0" Padding="12">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding PublishDateDisplay}" FontSize="12" Foreground="#666"/>
+                    <Image Source="{Binding Image}" MaxHeight="220" Stretch="UniformToFill" HorizontalAlignment="Stretch" Margin="0,4,0,4"/>                    
+                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap" FontSize="14"/>
+                    <TextBlock Text="{Binding Link}" FontSize="12" Foreground="#3366BB" TextWrapping="Wrap"
+                               TextDecorations="Underline"/>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Column="1" Spacing="12">
+      <TextBlock Text="Feed URL" FontWeight="SemiBold"/>
+      <TextBox x:Name="FeedUrlTextBox" Watermark="https://example.com/feed"/>
+      <TextBlock Text="Number of entries" FontWeight="SemiBold"/>
+      <controls:NumericUpDown x:Name="EntryCountNumeric" Minimum="1" Maximum="50" Value="5"/>
+      <Button Content="Download Feed" Click="OnDownloadFeedClick" HorizontalAlignment="Stretch"/>
+      <Button Content="Save Feed" Click="OnSaveFeedClick" HorizontalAlignment="Stretch"/>
+      <Button Content="Open Saved Feed" Click="OnOpenFeedClick" HorizontalAlignment="Stretch"/>
+      <TextBlock x:Name="StatusTextBlock" TextWrapping="Wrap" Foreground="#444"/>
+    </StackPanel>
+  </Grid>
 </Window>
