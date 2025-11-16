@@ -21,6 +21,7 @@ public class RssEntry
     public string Title { get; set; } = string.Empty;
     public DateTimeOffset PublishDate { get; set; } = DateTimeOffset.UtcNow;
     public string Content { get; set; } = string.Empty;
+    public string InlineContent { get; set; } = string.Empty;
     public string Link { get; set; } = string.Empty;
     public string? ImageBase64 { get; set; }
     public string? ImageMimeType { get; set; }

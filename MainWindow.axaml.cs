@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -177,7 +178,7 @@ public partial class MainWindow : Window
             {
                 Title = entry.Title,
                 PublishDate = entry.PublishDate,
-                Content = entry.Content,
+                Content = BuildDisplayContent(entry),
                 Link = entry.Link,
                 Image = CreateBitmap(entry.ImageBase64)
             });
@@ -211,6 +212,8 @@ public partial class MainWindow : Window
         foreach (var item in items)
         {
             var rawContent = GetRawContent(item);
+            var cleanContent = CleanText(rawContent);
+            var inlineContent = await TryInlineArticleAsync(item, rawContent, cleanContent);
             var imageUrl = ExtractFirstImageUrl(rawContent);
             (string base64, string mimeType)? imageData = null;
             if (!string.IsNullOrEmpty(imageUrl))
@@ -222,7 +225,8 @@ public partial class MainWindow : Window
             {
                 Title = WebUtility.HtmlDecode(item.Title?.Text ?? "Untitled"),
                 PublishDate = item.PublishDate != DateTimeOffset.MinValue ? item.PublishDate : DateTimeOffset.UtcNow,
-                Content = CleanText(rawContent),
+                Content = cleanContent,
+                InlineContent = inlineContent ?? string.Empty,
                 Link = item.Links.FirstOrDefault()?.Uri?.ToString() ?? string.Empty,
                 ImageBase64 = imageData?.base64,
                 ImageMimeType = imageData?.mimeType
@@ -261,6 +265,154 @@ public partial class MainWindow : Window
         {
             return null;
         }
+    }
+
+    private async Task<string?> TryInlineArticleAsync(System.ServiceModel.Syndication.SyndicationItem item, string rawContent, string cleanContent)
+    {
+        if (!IsShortContent(cleanContent))
+        {
+            return null;
+        }
+
+        var singleLink = TryGetSingleLink(item, rawContent, cleanContent);
+        if (singleLink is null)
+        {
+            return null;
+        }
+
+        return await DownloadInlineArticleAsync(singleLink);
+    }
+
+    private static bool IsShortContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return true;
+        }
+
+        var trimmed = content.Trim();
+        if (trimmed.Length <= 200)
+        {
+            return true;
+        }
+
+        var wordCount = Regex.Matches(trimmed, "\\b[^\\s]+\\b").Count;
+        return wordCount <= 40;
+    }
+
+    private static Uri? TryGetSingleLink(System.ServiceModel.Syndication.SyndicationItem item, string rawContent, string cleanContent)
+    {
+        var candidates = new List<string>();
+
+        foreach (var link in item.Links)
+        {
+            if (link.Uri is { } uri && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                candidates.Add(uri.ToString());
+            }
+        }
+
+        candidates.AddRange(ExtractLinksFromHtml(rawContent));
+
+        foreach (Match match in Regex.Matches(cleanContent ?? string.Empty, @"https?://[^\s\"'<>]+", RegexOptions.IgnoreCase))
+        {
+            candidates.Add(match.Value);
+        }
+
+        var distinct = candidates
+            .Where(link => Uri.TryCreate(link, UriKind.Absolute, out _))
+            .Select(link => link.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (distinct.Count == 1 && Uri.TryCreate(distinct[0], UriKind.Absolute, out var single))
+        {
+            return single;
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> ExtractLinksFromHtml(string html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return Array.Empty<string>();
+        }
+
+        var matches = Regex.Matches(html, "href=\\\"(?<url>[^\\\"]+)\\\"", RegexOptions.IgnoreCase);
+        var results = new List<string>();
+        foreach (Match match in matches)
+        {
+            if (match.Groups["url"].Success)
+            {
+                results.Add(match.Groups["url"].Value);
+            }
+        }
+
+        return results;
+    }
+
+    private async Task<string?> DownloadInlineArticleAsync(Uri uri)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync(uri);
+            response.EnsureSuccessStatusCode();
+
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (mediaType is not null && !mediaType.Contains("html", StringComparison.OrdinalIgnoreCase) && !mediaType.StartsWith("text", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var html = await response.Content.ReadAsStringAsync();
+            var mainSection = ExtractMainArticle(html);
+            var cleaned = CleanText(mainSection);
+            if (string.IsNullOrWhiteSpace(cleaned))
+            {
+                return null;
+            }
+
+            return cleaned;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ExtractMainArticle(string html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return string.Empty;
+        }
+
+        var articleMatch = Regex.Match(html, "<article[^>]*>(?<article>.*?)</article>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (articleMatch.Success)
+        {
+            return articleMatch.Groups["article"].Value;
+        }
+
+        var bodyMatch = Regex.Match(html, "<body[^>]*>(?<body>.*?)</body>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        return bodyMatch.Success ? bodyMatch.Groups["body"].Value : html;
+    }
+
+    private static string BuildDisplayContent(RssEntry entry)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(entry.Content))
+        {
+            parts.Add(entry.Content.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.InlineContent))
+        {
+            parts.Add(entry.InlineContent.Trim());
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join("\n\n", parts);
     }
 
     private static string CleanText(string html)
