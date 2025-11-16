@@ -314,7 +314,7 @@ public partial class MainWindow : Window
 
         candidates.AddRange(ExtractLinksFromHtml(rawContent));
 
-        foreach (Match match in Regex.Matches(cleanContent ?? string.Empty, @"https?://[^\s\"'<>]+", RegexOptions.IgnoreCase))
+        foreach (Match match in Regex.Matches(cleanContent ?? string.Empty, @"https?://[^\s""'<>]+", RegexOptions.IgnoreCase))
         {
             candidates.Add(match.Value);
         }
